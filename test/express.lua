@@ -4,7 +4,7 @@ local app = express()
 local port = 3000
 
 app:get('/', function(req, res)
-    res:send 'Hello, World!'
+    res:status(200):send 'Hello, World!'
 end)
 
 app:listen(port, function()
