@@ -8,5 +8,5 @@ app:get('/', function(req, res)
 end)
 
 app:listen(port, function()
-    print('Example app listening on port: ' .. port)
+    print('app started')
 end)
