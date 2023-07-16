@@ -8,5 +8,5 @@ app:get('/', function(req, res)
 end)
 
 app:listen(port, function()
-    print('app started')
+    print 'app started'
 end)
