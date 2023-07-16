@@ -581,7 +581,7 @@ local function syntaxstr(ast, vars)
                 '))]'
     elseif ast.type == 'table' then
         local fun = {}
-        fun[#fun + 1] = '(await (async ()=>{var n=0,t=new Map();'
+        fun[#fun + 1] = '(await (async ()=>{var n=0,t=Object.create(null);'
         for i = 1, #ast do
             local field = ast[i]
             if field.type == 'fieldnamed' then
@@ -667,10 +667,29 @@ local function syntaxstr(ast, vars)
     elseif ast.type == 'method' then
         local apply = {}
         apply[#apply + 1] = '(await lua_apply('
+        apply[#apply + 1] = 'lua_first('
         apply[#apply + 1] = syntaxstr(ast[1], vars)
-        apply[#apply + 1] = ','
-        for i = 2, #ast do
-            if i == #ast then
+        apply[#apply + 1] = '),"'
+        apply[#apply + 1] = ast[2][1]
+        apply[#apply + 1] = '",'
+        local call = ast[#ast]
+        for i = 1, #call do
+            if i == #call then
+                apply[#apply + 1] = '...'
+                apply[#apply + 1] = syntaxstr(call[i], vars)
+            else
+                apply[#apply + 1] = 'lua_first('
+                apply[#apply + 1] = syntaxstr(call[i], vars)
+                apply[#apply + 1] = '),'
+            end
+        end
+        apply[#apply + 1] = '))'
+        return table.concat(apply)
+    elseif ast.type == 'call' then
+        local apply = {}
+        apply[#apply + 1] = '(await lua_call('
+        for i = 1, #ast do
+            if i == #ast and i > 1 then
                 apply[#apply + 1] = '...'
                 apply[#apply + 1] = syntaxstr(ast[i], vars)
             else
@@ -680,23 +699,6 @@ local function syntaxstr(ast, vars)
             end
         end
         apply[#apply + 1] = '))'
-        return table.concat(apply)
-    elseif ast.type == 'call' then
-        local apply = {}
-        apply[#apply + 1] = '(await (lua_first('
-        apply[#apply + 1] = syntaxstr(ast[1], vars)
-        apply[#apply + 1] = ')('
-        for i = 2, #ast do
-            if i == #ast then
-                apply[#apply + 1] = '...'
-                apply[#apply + 1] = syntaxstr(ast[i], vars)
-            else
-                apply[#apply + 1] = 'lua_first('
-                apply[#apply + 1] = syntaxstr(ast[i], vars)
-                apply[#apply + 1] = '),'
-            end
-        end
-        apply[#apply + 1] = ')))'
         return table.concat(apply)
     elseif ast.type == 'dotindex' then
         return '[lua_index(lua_first(' .. syntaxstr(ast[1], vars) .. '),"' .. ast[2][1] .. '")]'
@@ -805,7 +807,7 @@ local function syntaxstr(ast, vars)
         local scope = {}
         vars[#vars + 1] = scope
         local parts = {}
-        parts[#parts + 1] = '[async (...varargs)=>{'
+        parts[#parts + 1] = '[async function(...varargs){if(this!=null)varargs.unshift(this);'
         for i = 1, #ast[1] do
             local arg = ast[1][i]
             if arg.type ~= 'varargs' then

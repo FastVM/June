@@ -1,6 +1,5 @@
 
 if (globalThis.Bun != null) {
-  var readline = new Map();
   var write = (s) => {
     Bun.stdout.write(s);
   };
@@ -11,28 +10,28 @@ if (globalThis.Bun != null) {
   var writeFile = async (p,s) => {
     return await Bun.write(p,s);
   };
+  var readline = Object.create(null);
   readline.read = () => Bun.stdin.read();
   readline.prompt = () => prompt("");
   readline.questionFloat = () => Number(prompt(""));
 } else {
-  var fs = require("fs/promises");
-  var process = require("process");
-  var readline = require("readline-sync");
+  const fs = import('fs/promises');
   var write = (s) => {
     process.stdout.write(s);
   };
   var argv = process.argv;
   var readFile = async(p) => {
-    return await fs.readFile(p);
+    return (await fs).readFile(p);
   };
   var writeFile = async(p,s) => {
-    await fs.writeFile(p,s);
+    await (await fs).writeFile(p,s);
   };
+  var readline = import('readline');
 }
 
 const internal = Symbol.for('internal');
 
-const lua_first = (a) => a[0];
+const lua_first = (a) => Array.isArray(a) ? a[0] : a;
 const lua_index = (a, b) => a[b];
 const lua_set = (a, b, c) => a[b] = c;
 
@@ -59,7 +58,12 @@ const lua_toboolean = (a) => a != null && a !== false;
 const lua_and = async (a, b) => (lua_toboolean(a) ? await b() : a);
 const lua_or = async (a, b) => (lua_toboolean(a) ? a : await b());
 
-const lua_apply = async (...args) => await args[0](...args);
+const lua_array_of = (v) => Array.isArray(v) ? v : [v];
+
+const lua_apply = async (obj, func, ...args) => {
+  return lua_array_of(await lua_index(obj, func).apply(obj, args));
+};
+const lua_call = async (func, ...args) => lua_array_of(await func.apply(null, args));
 
 const lua_length = (a) => {
   if (typeof a === "string") {
@@ -75,12 +79,19 @@ const lua_length = (a) => {
   }
 };
 
-const local__ENV = new Map();
+const local__ENV = Object.create(null);
 
+local__ENV.js = Object.create(null);
+local__ENV.js.global = globalThis;
+local__ENV.js.new = (o, ...a) => {
+  return new o(...a);
+};
+local__ENV.js.import = (x) => import(x);
+  
 local__ENV._G = local__ENV;
-local__ENV.arg = new Map();
+local__ENV.arg = Object.create(null);
 for (let i = 0; i < argv.length; i++) {
-  local__ENV.arg[i-1] = argv[i];
+    local__ENV.arg[i-1] = argv[i];
 }
 
 const typemap = {
@@ -99,7 +110,7 @@ local__ENV.tonumber = (n) => [Number(n)];
 local__ENV.tostring = (s) => [String(s)];
 local__ENV.print = console.log;
 
-local__ENV.table = new Map();
+local__ENV.table = Object.create(null);
 local__ENV.table.concat = (t, j='') => {
   const parts = [];
   for (var i = 1; t[i] != null; i++) {
@@ -108,21 +119,21 @@ local__ENV.table.concat = (t, j='') => {
   return [parts.join(j)];
 }
 
-local__ENV.io = new Map();
+local__ENV.io = Object.create(null);
 local__ENV.io.write = (s) => {
   processwrite(s);
   return [null];
 };
-local__ENV.io.read = (s) => {
+local__ENV.io.read = async(s) => {
   switch (s) {
     case "*all":
-      return readline.read();
+      return (await readline).read();
     case "*line":
-      return readline.prompt();
+      return (await readline).prompt();
     case "*number":
-      return readline.questionFloat();
+      return (await readline).questionFloat();
     default:
-      return readline.read(Number(s));
+      return (await readline).read(Number(s));
   }
 };
 local__ENV.io.open = async(path, mode="r") => {
@@ -130,8 +141,8 @@ local__ENV.io.open = async(path, mode="r") => {
     throw new Error('cannot open non-string path');
   }
   if (mode.indexOf('r') !== -1) {
-    const file = new Map();
-    file[internal] = new Map();
+    const file = Object.create(null);
+    file[internal] = Object.create(null);
     file[internal].str = await readFile(path);
     file[internal].head = 0;
     file.close = () => {
@@ -171,8 +182,8 @@ local__ENV.io.open = async(path, mode="r") => {
     };
     return [file];
   } else if (mode.indexOf('w') !== -1) {
-    const file = new Map();
-    file[internal] = new Map();
+    const file = Object.create(null);
+    file[internal] = Object.create(null);
     file[internal].path = path;
     file[internal].parts = [];
     file.close = (file) => {
@@ -190,7 +201,7 @@ local__ENV.io.open = async(path, mode="r") => {
   }
 };
 
-local__ENV.string = new Map();
+local__ENV.string = Object.create(null);
 local__ENV.string.format = (fmt, ...args) => {
   let i = 0;
   const format = (match, dot, pad, fmt) => {
