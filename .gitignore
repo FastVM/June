@@ -5,6 +5,6 @@ out.js
 rec.js
 bench/*.res
 bench/all.log
-package-lock.kson
+package-lock.json
 package.kson
 node_modules
