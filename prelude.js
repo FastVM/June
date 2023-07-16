@@ -1,36 +1,67 @@
-const process = require("process");
-const readline = require("readline-sync");
 
-const lua = new Map();
+if (globalThis.Bun != null) {
+  var readline = new Map();
+  var write = (s) => {
+    Bun.stdout.write(s);
+  };
+  var argv = Bun.argv;
+  var readFile = (s) => {
+    return Bun.readFile(s);
+  };
+  var writeFile = async (p,s) => {
+    return await Bun.write(p,s);
+  };
+  readline.read = () => Bun.stdin.read();
+  readline.prompt = () => prompt("");
+  readline.questionFloat = () => Number(prompt(""));
+} else {
+  var fs = require("fs/promises");
+  var process = require("process");
+  var readline = require("readline-sync");
+  var write = (s) => {
+    process.stdout.write(s);
+  };
+  var argv = process.argv;
+  var readFile = async(p) => {
+    return await fs.readFile(p);
+  };
+  var writeFile = async(p,s) => {
+    await fs.writeFile(p,s);
+  };
+}
 
-lua.first = (a) => a[0];
-lua.index = (a, b) => a[b];
-lua.set = (a, b, c) => a[b] = c;
+const internal = Symbol.for('internal');
 
-lua.add = (a, b) => a + b;
-lua.sub = (a, b) => a - b;
-lua.mul = (a, b) => a * b;
-lua.div = (a, b) => a / b;
-lua.mod = (a, b) => a % b;
-lua.pow = (a, b) => Math.pow(a, b);
+const lua_first = (a) => a[0];
+const lua_index = (a, b) => a[b];
+const lua_set = (a, b, c) => a[b] = c;
 
-lua.unm = (n) => -n;
+const lua_add = (a, b) => a + b;
+const lua_sub = (a, b) => a - b;
+const lua_mul = (a, b) => a * b;
+const lua_div = (a, b) => a / b;
+const lua_mod = (a, b) => a % b;
+const lua_pow = (a, b) => Math.pow(a, b);
 
-lua.eq = (a, b) => a === b;
-lua.ne = (a, b) => a !== b;
-lua.lt = (a, b) => a < b;
-lua.gt = (a, b) => a > b;
-lua.le = (a, b) => a <= b;
-lua.ge = (a, b) => a >= b;
+const lua_unm = (n) => -n;
 
-lua.concat = (a, b) => `${a}${b}`;
+const lua_eq = (a, b) => a === b;
+const lua_ne = (a, b) => a !== b;
+const lua_lt = (a, b) => a < b;
+const lua_gt = (a, b) => a > b;
+const lua_le = (a, b) => a <= b;
+const lua_ge = (a, b) => a >= b;
 
-lua.toboolean = (a) => a != null && a !== false;
+const lua_concat = (a, b) => `${a}${b}`;
 
-lua.and = (a, b) => (lua.toboolean(a) ? b() : a);
-lua.or = (a, b) => (lua.toboolean(a) ? a : b());
+const lua_toboolean = (a) => a != null && a !== false;
 
-lua.length = (a) => {
+const lua_and = async (a, b) => (lua_toboolean(a) ? await b() : a);
+const lua_or = async (a, b) => (lua_toboolean(a) ? a : await b());
+
+const lua_apply = async (...args) => await args[0](...args);
+
+const lua_length = (a) => {
   if (typeof a === "string") {
     return a.length;
   } else if (typeof a === "object") {
@@ -40,7 +71,7 @@ lua.length = (a) => {
     }
     return i-1;
   } else {
-    throw new Error("cannot get length")
+    throw new Error(`cannot get length (jstype: ${typeof a})`)
   }
 };
 
@@ -48,17 +79,38 @@ const local__ENV = new Map();
 
 local__ENV._G = local__ENV;
 local__ENV.arg = new Map();
-for (let i = 0; i < process.argv.length; i++) {
-  local__ENV.arg[i-1] = process.argv[i];
+for (let i = 0; i < argv.length; i++) {
+  local__ENV.arg[i-1] = argv[i];
 }
 
+const typemap = {
+  "undefined": "nil",
+  "null": "nil",
+  "boolean": "boolean",
+  "string": "string",
+  "number": "number",
+  "object": "table",
+};
+local__ENV.error = (v) => {
+  throw new Error(v);
+}
+local__ENV.type = (v) => v instanceof Function ? ['function'] : [typemap[typeof v]];
 local__ENV.tonumber = (n) => [Number(n)];
 local__ENV.tostring = (s) => [String(s)];
-
 local__ENV.print = console.log;
+
+local__ENV.table = new Map();
+local__ENV.table.concat = (t, j='') => {
+  const parts = [];
+  for (var i = 1; t[i] != null; i++) {
+    parts.push(t[i]);
+  }
+  return [parts.join(j)];
+}
+
 local__ENV.io = new Map();
 local__ENV.io.write = (s) => {
-  process.stdout.write(s);
+  processwrite(s);
   return [null];
 };
 local__ENV.io.read = (s) => {
@@ -71,6 +123,70 @@ local__ENV.io.read = (s) => {
       return readline.questionFloat();
     default:
       return readline.read(Number(s));
+  }
+};
+local__ENV.io.open = async(path, mode="r") => {
+  if (typeof path !== 'string') {
+    throw new Error('cannot open non-string path');
+  }
+  if (mode.indexOf('r') !== -1) {
+    const file = new Map();
+    file[internal] = new Map();
+    file[internal].str = await readFile(path);
+    file[internal].head = 0;
+    file.close = () => {
+    };
+    file.read = (file, txt) => {
+      const data = file[internal];
+      switch (txt) {
+        case '*all':
+          return [data.str];
+        case '*line':
+          var l = [];
+          while (data.head < data.str.length && !/[\n\r]/.test(data.str[data.head])) {
+            l.push(data.str[data.head++]);
+          }
+          return [l.join('')];
+        case '*number':
+          var n = 0;
+          while (data.head < data.str.length) {
+            var c = data.str.charCodeAt(data.head) - 48;
+            if (0 <= c && c <= 9) {
+              n *= 10;
+              n += c;
+              data.head += 1;
+            } else if (n == 0) {
+              throw new Error('file:read(\'*number\') not a number');
+            } else {
+              return [n];
+            }
+          } 
+        default:
+          var l = [];
+          for (var i = Number(txt); i > 0; i-=1) {
+            l.push(data.str[data.head++]);
+          }
+          return [l.join('')];
+      }
+    };
+    return [file];
+  } else if (mode.indexOf('w') !== -1) {
+    const file = new Map();
+    file[internal] = new Map();
+    file[internal].path = path;
+    file[internal].parts = [];
+    file.close = (file) => {
+      const data = file[internal];
+      writeFile(data.path, data.parts.join(''));
+      return [null];
+    };
+    file.write = (file, txt) => {
+      file[internal].parts.push(txt);
+      return [null];
+    };
+    return [file];
+  } else {
+    throw new Error(`file mode: ${mode}`);
   }
 };
 
@@ -115,8 +231,8 @@ local__ENV.string.format = (fmt, ...args) => {
         }
     }
   };
-  const ret = fmt.replace(/%(\.?)(\d*)([dsfFboxXcgG])/g, (...args) => {
-    const ret = format(...args);
+  const ret = fmt.replace(/%(\.?)(\d*)([dsfFboxXcgG])/g, (...match) => {
+    const ret = format(...match);
     i += 1;
     return ret;
   });
@@ -126,5 +242,8 @@ local__ENV.string.len = (x) => {
   return [String(x).length];
 };
 local__ENV.string.sub = (x, l, h) => {
-  return [String(x).substring(l, h + 1)];
+  return [String(x).substring(l - 1, h)];
+};
+local__ENV.string.byte = (s, i=1) => {
+  return [s.charCodeAt(i-1)];
 };

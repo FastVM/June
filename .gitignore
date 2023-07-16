@@ -2,6 +2,7 @@
 .config.make
 fmt.js
 out.js
+rec.js
 bench/*.res
 bench/all.log
 package-lock.kson
