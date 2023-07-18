@@ -1,10 +1,9 @@
 .babelrc
 .config.make
-fmt.js
-out.js
-rec.js
+lua.js
 bench/*.res
 bench/all.log
 package-lock.json
 package.kson
 node_modules
+*.opt.js
