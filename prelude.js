@@ -83,12 +83,21 @@ export const length = meta("__len", (a) => {
 });
 
 export const env = (dataArg) => {
-  const data = dataArg ?? {};
-  const argv = data.argv ?? process.argv;
+  const data = dataArg != null ? dataArg : {};
+  const argv = data.argv != null ? data.argv : [];
+  let buf = '';
   const write =
-    data.write ??
-    ((s) => {
-      process.stdout.write(s);
+    data.write != null
+    ? data.write
+    : ((s) => {
+      for (const c in s) {
+        if (c === '\n') {
+          console.log(buf);
+          buf = '';
+        } else if (c !== '\r') {
+          buf += c;
+        }
+      }
     });
   const env = Object.create(null);
 
@@ -96,11 +105,11 @@ export const env = (dataArg) => {
     return await eval(s);
   };
   env.js = Object.create(null);
-  env.js.global = globalThis;
+  // env.js.global = this;
   env.js.new = (o, ...a) => {
     return new o(...a);
   };
-  env.js.import = (x) => globalThis.import(x);
+  // env.js.import = (x) => this.import(x);
 
   env._G = env;
   env.arg = Object.create(null);

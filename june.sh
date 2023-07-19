@@ -2,4 +2,4 @@
 
 test -f lua.js || luajit lua.lua lua.lua lua.js
 
-node lua.js "$@"
+~/.bun/bin/bun lua.js "$@"

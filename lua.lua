@@ -573,11 +573,11 @@ local function syntaxstr(ast, vars)
     elseif ast.type == 'string' then
         return syntaxstr(ast[1], vars)
     elseif ast.type == 'or' then
-        return '[await lua.or(lua.first(' .. syntaxstr(ast[1], vars) .. '),async()=>lua.first(' .. syntaxstr(ast[2], vars) ..
+        return '[await or(first(' .. syntaxstr(ast[1], vars) .. '),async()=>first(' .. syntaxstr(ast[2], vars) ..
                    '))]'
     elseif ast.type == 'and' then
         return
-            '[await lua.and(lua.first(' .. syntaxstr(ast[1], vars) .. '),async()=>lua.first(' .. syntaxstr(ast[2], vars) ..
+            '[await and(first(' .. syntaxstr(ast[1], vars) .. '),async()=>first(' .. syntaxstr(ast[2], vars) ..
                 '))]'
     elseif ast.type == 'table' then
         local fun = {}
@@ -587,12 +587,12 @@ local function syntaxstr(ast, vars)
             if field.type == 'fieldnamed' then
                 fun[#fun + 1] = 't["'
                 fun[#fun + 1] = field[1][1]
-                fun[#fun + 1] = '"]=lua.first('
+                fun[#fun + 1] = '"]=first('
                 fun[#fun + 1] = syntaxstr(field[2], vars)
                 fun[#fun + 1] = ');'
             elseif field.type == 'fieldnth' then
                 if i ~= #ast then
-                    fun[#fun + 1] = 't[++n]=lua.first('
+                    fun[#fun + 1] = 't[++n]=first('
                     fun[#fun + 1] = syntaxstr(field[1], vars)
                     fun[#fun + 1] = ');'
                 else
@@ -601,9 +601,9 @@ local function syntaxstr(ast, vars)
                     fun[#fun + 1] = '){t[++n]=v;}'
                 end
             elseif field.type == 'fieldvalue' then
-                fun[#fun + 1] = 't[lua.first('
+                fun[#fun + 1] = 't[first('
                 fun[#fun + 1] = syntaxstr(field[1], vars)
-                fun[#fun + 1] = ')]=lua.first('
+                fun[#fun + 1] = ')]=first('
                 fun[#fun + 1] = syntaxstr(field[2], vars)
                 fun[#fun + 1] = ');'
             end
@@ -611,7 +611,7 @@ local function syntaxstr(ast, vars)
         fun[#fun + 1] = 'return [t];})())'
         return table.concat(fun)
     elseif ast.type == 'while' then
-        return 'while(lua.toboolean(' .. syntaxstr(ast[1], vars) .. ')) {' .. syntaxstr(ast[2], vars) .. '}'
+        return 'while(toboolean(' .. syntaxstr(ast[1], vars) .. ')) {' .. syntaxstr(ast[2], vars) .. '}'
     elseif ast.type == 'forin' then
         local f = makeast('ident', nil, mangle('func'))
         local s = makeast('ident', nil, mangle('state'))
@@ -631,7 +631,7 @@ local function syntaxstr(ast, vars)
         cvar[ast[1][1]] = false
         local inrange = {}
         for i = 2, #ast - 1 do
-            inrange[#inrange + 1] = 'lua.first(' .. syntaxstr(ast[i], vars) .. ')'
+            inrange[#inrange + 1] = 'first(' .. syntaxstr(ast[i], vars) .. ')'
         end
         if inrange[3] == nil then
             inrange[3] = '1'
@@ -650,14 +650,14 @@ local function syntaxstr(ast, vars)
                 end
             end
         end
-        return '[lua.index(local__ENV,"' .. ast[1] .. '")]'
+        return '[index(local__ENV,"' .. ast[1] .. '")]'
     elseif ast.type == 'break' then
         return 'break'
     elseif ast.type == 'number' then
         return '[' .. tostring(ast[1]) .. ']'
     elseif ast.type == 'program' then
         local tab = {}
-        tab[#tab + 1] = '(async(local__ENV=lua.env())=>{local__ENV.js.lua=lua;'
+        tab[#tab + 1] = '(async(local__ENV=env())=>{;'
         for i = 1, #ast do
             tab[#tab + 1] = syntaxstr(ast[i], vars)
             tab[#tab + 1] = ';'
@@ -679,8 +679,8 @@ local function syntaxstr(ast, vars)
         return syntaxstr(unpostfix(ast), vars)
     elseif ast.type == 'method' then
         local apply = {}
-        apply[#apply + 1] = '(await lua.apply('
-        apply[#apply + 1] = 'lua.first('
+        apply[#apply + 1] = '(await apply('
+        apply[#apply + 1] = 'first('
         apply[#apply + 1] = syntaxstr(ast[1], vars)
         apply[#apply + 1] = '),"'
         apply[#apply + 1] = ast[2][1]
@@ -691,7 +691,7 @@ local function syntaxstr(ast, vars)
                 apply[#apply + 1] = '...'
                 apply[#apply + 1] = syntaxstr(call[i], vars)
             else
-                apply[#apply + 1] = 'lua.first('
+                apply[#apply + 1] = 'first('
                 apply[#apply + 1] = syntaxstr(call[i], vars)
                 apply[#apply + 1] = '),'
             end
@@ -700,13 +700,13 @@ local function syntaxstr(ast, vars)
         return table.concat(apply)
     elseif ast.type == 'call' then
         local apply = {}
-        apply[#apply + 1] = '(await lua.call('
+        apply[#apply + 1] = '(await call('
         for i = 1, #ast do
             if i == #ast and i > 1 then
                 apply[#apply + 1] = '...'
                 apply[#apply + 1] = syntaxstr(ast[i], vars)
             else
-                apply[#apply + 1] = 'lua.first('
+                apply[#apply + 1] = 'first('
                 apply[#apply + 1] = syntaxstr(ast[i], vars)
                 apply[#apply + 1] = '),'
             end
@@ -714,9 +714,9 @@ local function syntaxstr(ast, vars)
         apply[#apply + 1] = '))'
         return table.concat(apply)
     elseif ast.type == 'dotindex' then
-        return '[lua.index(lua.first(' .. syntaxstr(ast[1], vars) .. '),"' .. ast[2][1] .. '")]'
+        return '[index(first(' .. syntaxstr(ast[1], vars) .. '),"' .. ast[2][1] .. '")]'
     elseif ast.type == 'index' then
-        return '[lua.index(lua.first(' .. syntaxstr(ast[1], vars) .. '),lua.first(' .. syntaxstr(ast[2], vars) .. '))]'
+        return '[index(first(' .. syntaxstr(ast[1], vars) .. '),first(' .. syntaxstr(ast[2], vars) .. '))]'
     elseif ast.type == 'assign' then
         local targets = ast[1]
         local exprs = ast[2]
@@ -724,7 +724,7 @@ local function syntaxstr(ast, vars)
         parts[#parts + 1] = '(await (async()=>{var parts=['
         for i = 1, #exprs do
             if i ~= #exprs then
-                parts[#parts + 1] = 'lua.first('
+                parts[#parts + 1] = 'first('
                 parts[#parts + 1] = syntaxstr(exprs[i], vars)
                 parts[#parts + 1] = '),'
             else
@@ -748,20 +748,20 @@ local function syntaxstr(ast, vars)
                     end
                 end
                 if global then
-                    parts[#parts + 1] = 'lua.set(local__ENV,"'
+                    parts[#parts + 1] = 'set(local__ENV,"'
                     parts[#parts + 1] = target[1]
                     parts[#parts + 1] = '",parts.shift());'
                 end
             elseif target.type == 'dotindex' then
-                parts[#parts + 1] = 'lua.set(lua.first('
+                parts[#parts + 1] = 'set(first('
                 parts[#parts + 1] = syntaxstr(target[1], vars)
                 parts[#parts + 1] = '),"'
                 parts[#parts + 1] = target[2][1]
                 parts[#parts + 1] = '",parts.shift());'
             elseif target.type == 'index' then
-                parts[#parts + 1] = 'lua.set(lua.first('
+                parts[#parts + 1] = 'set(first('
                 parts[#parts + 1] = syntaxstr(target[1], vars)
-                parts[#parts + 1] = '),lua.first('
+                parts[#parts + 1] = '),first('
                 parts[#parts + 1] = syntaxstr(target[2], vars)
                 parts[#parts + 1] = '),parts.shift());'
             else
@@ -792,7 +792,7 @@ local function syntaxstr(ast, vars)
         if idents.type == 'ident' then
             cvar[#cvar + 1] = idents[1]
             cvar[idents[1]] = true
-            return 'let ' .. mangle(idents[1]) .. '=lua.first(' .. syntaxstr(exprs, vars) .. ')'
+            return 'let ' .. mangle(idents[1]) .. '=first(' .. syntaxstr(exprs, vars) .. ')'
         else
             local tab = {}
             tab[#tab + 1] = 'var parts=['
@@ -843,7 +843,7 @@ local function syntaxstr(ast, vars)
         parts[#parts + 1] = '{return['
         for i = 1, #ast[1] do
             if i ~= #ast[1] then
-                parts[#parts + 1] = 'lua.first('
+                parts[#parts + 1] = 'first('
                 parts[#parts + 1] = syntaxstr(ast[1][i], vars)
                 parts[#parts + 1] = '),'
             else
@@ -859,13 +859,13 @@ local function syntaxstr(ast, vars)
             local part = ast[i]
             if part.type == 'case' then
                 if i == 1 then
-                    cond[#cond + 1] = 'if(lua.first('
+                    cond[#cond + 1] = 'if(first('
                     cond[#cond + 1] = syntaxstr(part[1], vars)
                     cond[#cond + 1] = ')){'
                     cond[#cond + 1] = syntaxstr(part[2], vars)
                     cond[#cond + 1] = '}'
                 else
-                    cond[#cond + 1] = 'else if(lua.first('
+                    cond[#cond + 1] = 'else if(first('
                     cond[#cond + 1] = syntaxstr(part[1], vars)
                     cond[#cond + 1] = ')){'
                     cond[#cond + 1] = syntaxstr(part[2], vars)
@@ -881,18 +881,18 @@ local function syntaxstr(ast, vars)
         end
         return table.concat(cond)
     elseif ast.type == 'negate' then
-        return '[lua.unm(lua.first(' .. syntaxstr(ast[1], vars) .. '))]'
+        return '[unm(first(' .. syntaxstr(ast[1], vars) .. '))]'
     elseif ast.type == 'length' then
-        return '[lua.length(lua.first(' .. syntaxstr(ast[1], vars) .. '))]'
+        return '[length(first(' .. syntaxstr(ast[1], vars) .. '))]'
     elseif ast.type == 'varargs' then
         return 'varargs'
     elseif ops[ast.type] ~= nil then
         local parts = {}
         parts[#parts + 1] = '[await '
         parts[#parts + 1] = ops[ast.type]
-        parts[#parts + 1] = '(lua.first('
+        parts[#parts + 1] = '(first('
         parts[#parts + 1] = syntaxstr(ast[1], vars)
-        parts[#parts + 1] = '),lua.first('
+        parts[#parts + 1] = '),first('
         parts[#parts + 1] = syntaxstr(ast[2], vars)
         parts[#parts + 1] = '))]'
         return table.concat(parts)
@@ -919,12 +919,14 @@ local src = slurp(arg[1])
 local res = parse(lua.program, src)
 if res.ok == true then
     local str = syntaxstr(res.ast, {{"_ENV"}})
+    local names = '{first,index,set,add,sub,mul,div,mod,pow,eq,ne,lt,le,gt,ge,concat,toboolean,and,or,apply,call,length,env}'
+    str = '(()=>{const lua=' .. names .. ';' .. str .. '})()'
     if outfile ~= nil then
-        local pre = 'import * as lua from "./prelude.js";'
+        local pre = 'import'.. names .. 'from "./prelude.js";'
         str = pre .. str
         io.dump(outfile, str)
     elseif eval and js then
-        local pre = 'export const main = (lua)=>'
+        local pre = 'export const main = (' .. names .. ')=>'
         str = pre .. str
         eval(str).main(js.lua)
     else

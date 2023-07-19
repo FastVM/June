@@ -7,4 +7,5 @@ package-lock.json
 package.kson
 node_modules
 *.opt.js
-dist
+dist/*
+out.*
