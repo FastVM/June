@@ -1,6 +1,8 @@
 {
   "type": "module",
-  "dependencies": {},
+  "dependencies": {
+    "babel-loader": "^9.1.3"
+  },
   "devDependencies": {
     "express": "^4.18.2"
   }

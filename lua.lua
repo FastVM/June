@@ -612,6 +612,19 @@ local function syntaxstr(ast, vars)
         return table.concat(fun)
     elseif ast.type == 'while' then
         return 'while(lua.toboolean(' .. syntaxstr(ast[1], vars) .. ')) {' .. syntaxstr(ast[2], vars) .. '}'
+    elseif ast.type == 'forin' then
+        local f = makeast('ident', nil, mangle('func'))
+        local s = makeast('ident', nil, mangle('state'))
+        local v = makeast('ident', nil, mangle('var'))
+        local exprfsv = makeast('local', nil, makeast('to', nil, f, s, v), ast[2])
+        print(aststr(exprfsv))
+        local exprvars = makeast('local', nil, ast[1], makeast('call', f, s, v))
+        local exprvars1nil = makeast('==', nil, ast[1][1], makeast('literal', nil, 'nil'))
+        local exprcheckvar1 = makeast('cond', nil, makeast('case', nil, exprvars1nil, makeast('begin', nil, makeast('break', 'nil'))))
+        local exprassignvar1 = makeast('assign', nil, makeast('to', nil, f),makeast('from', nil, ast[1][1]))
+        local exprloopbody = makeast('begin', nil, exprvars, exprcheckvar1, exprassignvar1, ast[3])
+        local exprloop = makeast('while', nil, makeast('literal', nil, 'true'), exprloopbody)
+        return syntaxstr(exprfsv, vars) .. ';' .. syntaxstr(exprloop, vars)
     elseif ast.type == 'for' then
         local cvar = vars[#vars]
         cvar[#cvar + 1] = ast[1][1]
