@@ -512,19 +512,19 @@ local function mangle(name)
 end
 
 local ops = {}
-ops['..'] = 'lua.concat'
-ops['+'] = 'lua.add'
-ops['-'] = 'lua.sub'
-ops['*'] = 'lua.pow'
-ops['/'] = 'lua.div'
-ops['%'] = 'lua.mod'
-ops['^'] = 'lua.pow'
-ops['<'] = 'lua.lt'
-ops['>'] = 'lua.gt'
-ops['<='] = 'lua.le'
-ops['>='] = 'lua.ge'
-ops['=='] = 'lua.eq'
-ops['~='] = 'lua.ne'
+ops['..'] = 'concat'
+ops['+'] = 'add'
+ops['-'] = 'sub'
+ops['*'] = 'pow'
+ops['/'] = 'div'
+ops['%'] = 'mod'
+ops['^'] = 'pow'
+ops['<'] = 'lt'
+ops['>'] = 'gt'
+ops['<='] = 'le'
+ops['>='] = 'ge'
+ops['=='] = 'eq'
+ops['~='] = 'ne'
 
 local function unpostfix(ast)
     if ast.type ~= 'postfix' then
@@ -544,7 +544,6 @@ end
 local ntables = 1
 
 local function syntaxstr(ast, vars)
-    -- print(aststr(ast))
     if type(ast) == 'string' then
         local chars = {}
         for i = 1, string.len(ast) do
@@ -569,7 +568,7 @@ local function syntaxstr(ast, vars)
             error('bad literal: ' .. tostring(ast[1]))
         end
     elseif ast.type == 'not' then
-        return '[!lua.toboolean(lua.first(' .. syntaxstr(ast[1], vars) .. '))]'
+        return '[!toboolean(first(' .. syntaxstr(ast[1], vars) .. '))]'
     elseif ast.type == 'string' then
         return syntaxstr(ast[1], vars)
     elseif ast.type == 'or' then
@@ -611,7 +610,7 @@ local function syntaxstr(ast, vars)
         fun[#fun + 1] = 'return [t];})())'
         return table.concat(fun)
     elseif ast.type == 'while' then
-        return 'while(toboolean(' .. syntaxstr(ast[1], vars) .. ')) {' .. syntaxstr(ast[2], vars) .. '}'
+        return 'while(toboolean(first(' .. syntaxstr(ast[1], vars) .. '))) {' .. syntaxstr(ast[2], vars) .. '}'
     elseif ast.type == 'forin' then
         local f = makeast('ident', nil, mangle('func'))
         local s = makeast('ident', nil, mangle('state'))
@@ -744,7 +743,11 @@ local function syntaxstr(ast, vars)
                             parts[#parts + 1] = mangle(target[1])
                             parts[#parts + 1] = '=parts.shift();'
                             global = false
+                            break
                         end
+                    end
+                    if not global then
+                        break
                     end
                 end
                 if global then
@@ -822,7 +825,7 @@ local function syntaxstr(ast, vars)
         local scope = {}
         vars[#vars + 1] = scope
         local parts = {}
-        parts[#parts + 1] = '[async function(...varargs){if(this!=null)varargs.unshift(this);'
+        parts[#parts + 1] = '[async function(...varargs){arg(varargs, this);'
         for i = 1, #ast[1] do
             local arg = ast[1][i]
             if arg.type ~= 'varargs' then
@@ -903,34 +906,47 @@ end
 
 local infile = nil
 local outfile = nil
+local run = false
+local newarg = {}
 for i = 1, #arg do
     local cur = arg[i]
-    if infile == nil then
+    if cur == '--' then
+        for j=0, #arg do
+            newarg[i] = arg[i+j]
+        end
+        local j = 0
+        while arg[j] ~= nil do
+            newarg[j] = arg[i+j]
+            j = j - 1
+        end
+        break
+    elseif infile == nil then
         infile = cur
     elseif outfile == nil then
         outfile = cur
     else
-        print('error: too many args')
+        error('too many args')
     end
 end
 
 local slurp = io.slurp
-local src = slurp(arg[1])
+local src = slurp(infile)
 local res = parse(lua.program, src)
 if res.ok == true then
     local str = syntaxstr(res.ast, {{"_ENV"}})
-    local names = '{first,index,set,add,sub,mul,div,mod,pow,eq,ne,lt,le,gt,ge,concat,toboolean,and,or,apply,call,length,env}'
-    str = '(()=>{const lua=' .. names .. ';' .. str .. '})()'
+    local names = '{first,index,set,unm,add,sub,mul,div,mod,pow,eq,ne,lt,le,gt,ge,concat,toboolean,and,or,apply,call,length,env,arg}'
+    str = '(function(){globalThis.global__lua =' .. names .. ';' .. str .. '}).call(null)'
     if outfile ~= nil then
         local pre = 'import'.. names .. 'from "./prelude.js";'
         str = pre .. str
         io.dump(outfile, str)
-    elseif eval and js then
-        local pre = 'export const main = (' .. names .. ')=>'
+    elseif js then
+        local pre = '(' .. names .. ')=>'
         str = pre .. str
-        eval(str).main(js.lua)
+        arg = newarg
+        js.global.eval(str)(js.global.global__lua)
     else
-        print('error: no output provided')
+        error('no output provided')
     end
 else
     error(res.msg)

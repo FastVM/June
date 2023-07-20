@@ -1,7 +1,7 @@
-import { readFile, writeFile } from "fs/promises";
+// import { readFile, writeFile } from "fs/promises";
 
-// const readFile = () => '';
-// const writeFile = () => {};
+const readFile = () => '';
+const writeFile = () => {};
 
 const internal = Symbol("internal");
 const metatable = Symbol("metatable");
@@ -17,6 +17,15 @@ const meta =
     }
     return func(obj, ...args);
   };
+
+export const shift = (a) => a.shift();
+
+export const arg = (v, t) => {
+  if (t == null || t == globalThis) {
+    return;
+  }
+  v.unshift(t);
+}
 
 export const first = (a) => (Array.isArray(a) ? a[0] : a);
 export const index = (a, b) => {
@@ -37,21 +46,25 @@ export const pow = meta("__pow", (a, b) => Math.pow(a, b));
 
 export const unm = meta("__unm", (n) => -n);
 
-export const eq = meta("__eq", (a, b) => (a, b) => {
+export const eq = meta("__eq", (a, b) => {
   if (a == null && b == null) {
     return true;
   }
   return a === b;
 });
-export const lt = meta("__lt", (a, b) => a < b);
-export const le = meta("__le", (a, b) => a <= b);
 export const ne = (a, b) => !eq(a, b);
+
+export const lt = meta("__lt", (a, b) => a < b);
 export const gt = (a, b) => lt(b, a);
+
+export const le = meta("__le", (a, b) => a <= b);
 export const ge = (a, b) => le(b, a);
 
-export const concat = meta("concat", (a, b) => `${a}${b}`);
+export const concat = meta("__concat", (a, b) => `${a}${b}`);
 
-export const toboolean = (a) => a != null && a !== false;
+export const toboolean = (a) => {
+  return a != null && a !== false;
+}
 
 export const and = async (a, b) => (toboolean(a) ? await b() : a);
 export const or = async (a, b) => (toboolean(a) ? a : await b());
@@ -92,15 +105,12 @@ export const env = (dataArg) => {
     });
   const env = Object.create(null);
 
-  env.eval = async (s) => {
-    return await eval(s);
-  };
-  env.js = Object.create(null);
-  env.js.global = globalThis;
-  env.js.new = (o, ...a) => {
-    return new o(...a);
-  };
-  env.js.import = (x) => globalThis.import(x);
+  // env.js = Object.create(null);
+  // env.js.global = globalThis;
+  // env.js.new = (o, ...a) => {
+  //   return new o(...a);
+  // };
+  // env.js.import = (x) => import(/* webpackMode: "lazy" */ x);
 
   env._G = env;
   env.arg = Object.create(null);
@@ -243,7 +253,7 @@ export const env = (dataArg) => {
   env.math.huge = Infinity;
   env.math.ldexp = (n, m) => [Math.ldexp(n, m)];
   env.math.log = (n) => [Math.log(n)];
-  env.math.log10 = (n) => [Math.log(n)];
+  env.math.log10 = (n) => [Math.log10(n)];
   env.math.max = (...n) => [Math.max(...n)];
   env.math.min = (...n) => [Math.min(...n)];
   const trunc = (n) => (n < 0 ? Math.ceil(x) : Math.floor(x));
