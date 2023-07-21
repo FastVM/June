@@ -1,7 +1,7 @@
-// import { readFile, writeFile } from "fs/promises";
+import { readFile, writeFile } from "fs/promises";
 
-const readFile = () => '';
-const writeFile = () => {};
+// const readFile = () => '';
+// const writeFile = () => {};
 
 const internal = Symbol("internal");
 const metatable = Symbol("metatable");
@@ -54,7 +54,9 @@ export const eq = meta("__eq", (a, b) => {
 });
 export const ne = (a, b) => !eq(a, b);
 
-export const lt = meta("__lt", (a, b) => a < b);
+export const lt = meta("__lt", (a, b) => {
+  return a < b;
+});
 export const gt = (a, b) => lt(b, a);
 
 export const le = meta("__le", (a, b) => a <= b);
@@ -105,12 +107,12 @@ export const env = (dataArg) => {
     });
   const env = Object.create(null);
 
-  // env.js = Object.create(null);
-  // env.js.global = globalThis;
-  // env.js.new = (o, ...a) => {
-  //   return new o(...a);
-  // };
-  // env.js.import = (x) => import(/* webpackMode: "lazy" */ x);
+  env.js = Object.create(null);
+  env.js.global = globalThis;
+  env.js.new = (o, ...a) => {
+    return new o(...a);
+  };
+  env.js.import = (x) => import(x);
 
   env._G = env;
   env.arg = Object.create(null);
@@ -119,8 +121,6 @@ export const env = (dataArg) => {
   }
 
   const typemap = {
-    undefined: "nil",
-    null: "nil",
     boolean: "boolean",
     string: "string",
     number: "number",
@@ -136,7 +136,7 @@ export const env = (dataArg) => {
     }
     return [v];
   };
-  env.type = (v) => [typemap[typeof v]];
+  env.type = (v) => v == null ? "nil" : [typemap[typeof v]];
   env.tonumber = (n) => [Number(n)];
   env.tostring = (s) => [String(s)];
   env.print = console.log;
@@ -149,6 +149,7 @@ export const env = (dataArg) => {
     }
     return [parts.join(j)];
   };
+  env.table.unpack = (args) => args;
 
   env.io = Object.create(null);
   env.io.write = (s) => {
