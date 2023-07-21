@@ -100,6 +100,7 @@ export const length = meta("__len", (a) => {
 export const env = (dataArg) => {
   const data = dataArg ?? {};
   const argv = data.argv ?? process.argv;
+  // const argv = ['node', 'lua.js', 'lua.lua', 'rec.js'];
   const write =
     data.write ??
     ((s) => {
