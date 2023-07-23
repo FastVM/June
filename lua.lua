@@ -16,8 +16,6 @@ if io.dump == nil then
     end
 end
 
-local unpack = unpack or table.unpack
-
 local fun = {}
 
 local function unlistof(list, arr)
@@ -361,6 +359,7 @@ for i = 1, #keywords do
     hashkeywords[keywords[i]] = keywords[i]
 end
 local function isident(id)
+    print(id, hashkeywords[id], hashkeywords[id] == nil)
     return hashkeywords[id] == nil
 end
 local function iskeyword(id)
@@ -427,7 +426,7 @@ lua.varargs = lua.ast('varargs', lua.ignore(parser_string('...')))
 lua.literal = lua.ast('literal', parser_first(lua.varargs, lua.keywordliteral('nil'), lua.keywordliteral('false'),
     lua.keywordliteral('true')))
 lua.number = lua.ast('number', lua.digits)
-lua.ident = lua.ast('ident', parser_cond(lua.name, isident))
+lua.ident = lua.ast('0ident', parser_cond(lua.name, isident))
 lua.params = lua.ast('params', lua.ignore(parser_exact('(')),
     parser_transform(parser_sep(parser_first(lua.varargs, lua.ident), parser_exact(',')), astlist),
     lua.ignore(parser_exact(')')))
@@ -629,14 +628,14 @@ local function syntaxstr(ast, vars)
                 chars[i] = chr
             end
         end
-        return '["' .. table.concat(chars) .. '"]'
+        return jstree('array', jstree('string', table.concat(chars)))
     elseif ast.type == 'literal' then
         if ast[1] == 'true' then
-            return '[true]'
+            return jstree('array', jstree('name', 'true'))
         elseif ast[1] == 'false' then
-            return '[false]'
+            return jstree('array', jstree('name', 'false'))
         elseif ast[1] == 'nil' then
-            return '[undefined]'
+            return jstree('array', jstree('name', 'undefined'))
         elseif type(ast[1]) == 'table' and ast[1].type == 'varargs' then
             return 'varargs'
         else
@@ -787,10 +786,10 @@ local function syntaxstr(ast, vars)
             jstree('name', 'call')
         }
         for i = 1, #ast do
-            if i ~= #ast or i == 1 then
-                args[#args + 1] = jstree('first', syntaxstr(ast[i], vars))
-            else
+            if i == #ast and i ~= 1 then
                 args[#args + 1] = jstree('expand', syntaxstr(ast[i], vars))
+            else
+                args[#args + 1] = jstree('first', syntaxstr(ast[i], vars))
             end
         end
         return jstable('call', args)

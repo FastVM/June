@@ -97,6 +97,14 @@ export const length = meta("__len", (a) => {
   }
 });
 
+const table_to_array = (table) => {
+  const arr = [];
+  for (let i = 1; table[i] != null; i++) {
+    arr.push(table[i]);
+  }
+  return arr;
+}
+
 export const env = (dataArg) => {
   const data = dataArg ?? {};
   const argv = data.argv ?? process.argv;
@@ -144,13 +152,9 @@ export const env = (dataArg) => {
 
   env.table = Object.create(null);
   env.table.concat = (t, j = "") => {
-    const parts = [];
-    for (let i = 1; t[i] != null; i++) {
-      parts.push(t[i]);
-    }
-    return [parts.join(j)];
+    return [table_to_array(t).join(j)];
   };
-  env.table.unpack = (args) => args;
+  env.table.unpack = (args) => table_to_array(args);
 
   env.io = Object.create(null);
   env.io.write = (s) => {
