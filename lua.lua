@@ -512,74 +512,8 @@ local function mangle(name)
 end
 
 local function jstable(type, ents)
-    if type == 'array' then
-        return '[' .. table.concat(ents) .. ']'
-    elseif type == 'stmts' then
-        return table.concat(ents, ';') .. ';'
-    elseif type == 'program' then
-        return '(async(local__ENV=env())=>{;' .. table.concat(ents, ';') .. ';})()'
-    elseif type == 'block' then
-        return '{' .. table.concat(ents, ';') .. ';}'
-    elseif type == 'if' then
-        return 'if(' .. ents[1] .. '){' .. ents[2] .. '}'
-    elseif type == 'ifelse' then
-        return 'if(' .. ents[1] .. '){' .. ents[2] .. '}else{' .. ents[3] .. '}'
-    elseif type == 'name' then
-        return ents[1]
-    elseif type == 'load' then
-        return mangle(ents[1])
-    elseif type == 'call' then
-        local res = {}
-        for i=2, #ents do
-            res[i-1] = ents[i]
-        end
-        return '(await ' .. ents[1] .. '(' .. table.concat(res, ',') .. '))'
-    elseif type == 'return' then
-        return 'return ' .. ents[1]
-    elseif type == 'toboolean' then
-        return 'await toboolean(' .. ents[1] .. ')'
-    elseif type == 'assign' then
-        return ents[1] .. '=' .. ents[2]
-    elseif type == 'get' then
-        return 'index(' .. ents[1] .. ',' .. ents[2] .. ')'
-    elseif type == 'set' then
-        return 'set(' .. ents[1] .. ',' .. ents[2] .. ',' .. ents[3] .. ')'
-    elseif type == 'string' then
-        return '"' .. ents[1] .. '"'
-    elseif type == 'expand' then
-        return '...(' .. ents[1] .. ')'
-    elseif type == 'iife' then
-        return '(await (async() => {' .. ents[1] .. '})())'
-    elseif type == 'lambda' then
-        return 'async function(...varargs){arg(varargs, this);' .. ents[1] .. ';}'
-    elseif type == 'shift' then
-        return '(' .. ents[1] .. ').shift()'
-    elseif type == 'arg' then
-        return 'var ' .. ents[1] .. '=varargs.shift()'
-    elseif type == 'first' then
-        return 'await first(' .. ents[1] .. ')'
-    elseif type == 'object' then
-        return 'Object.create(null)'
-    elseif type == 'break' then
-        return 'break'
-    elseif type == 'number' then
-        return ents[1]
-    elseif type == 'while' then
-        return 'while(' .. ents[1] .. '){' .. ents[2] .. '}'
-    elseif type == 'delay' then
-        return '(async()=>' .. ents[1] .. ')'
-    elseif type == 'forof' then
-        return 'for (const ' .. ents[1] .. ' of ' .. ents[2] .. '){' .. ents[3] .. '}'
-    elseif type == 'for' then
-        return 'for (let i=' .. ents[2] .. ',m=' .. ents[3] .. ',c=' .. ents[4] .. ';i<=m;i+=c){var ' .. ents[1] ..
-        '=i;' .. ents[5] .. '}'
-    elseif type == 'add' then
-        return '(('.. ents[1] .. ')+(' .. ents[2] .. '))'
-    elseif type == 'let' then
-        return 'var ' .. ents[1] .. '=' .. ents[2]
-    else
-        error('jstree(' .. type .. ')')
-    end
+    ents.type = type
+    return ents
 end
 
 local function jstree(type, ...)
@@ -616,7 +550,7 @@ local function unpostfix(ast)
     return tab
 end
 
-local function syntaxstr(ast, vars)
+local function syntax2jstree(ast, vars)
     if type(ast) == 'string' then
         local chars = {}
         for i = 1, string.len(ast) do
@@ -636,22 +570,28 @@ local function syntaxstr(ast, vars)
         elseif ast[1] == 'nil' then
             return jstree('array', jstree('name', 'undefined'))
         elseif type(ast[1]) == 'table' and ast[1].type == 'varargs' then
-            return 'varargs'
+            return jstree('name', 'varargs')
         else
             error('bad literal: ' .. tostring(ast[1]))
         end
     elseif ast.type == 'not' then
-        return '[!toboolean(first(' .. syntaxstr(ast[1], vars) .. '))]'
+        return jstree(
+            'array',
+            jstree(
+                'not',
+                jstree('toboolean', jstree('first', syntax2jstree(ast[1], vars)))
+            )
+        )
     elseif ast.type == 'string' then
-        return syntaxstr(ast[1], vars)
+        return syntax2jstree(ast[1], vars)
     elseif ast.type == 'or' then
         return jstree(
             'array',
             jstree(
                 'call',
                 jstree('name', 'or'),
-                jstree('first', syntaxstr(ast[1], vars)),
-                jstree('delay', jstree('first', syntaxstr(ast[2], vars)))
+                jstree('first', syntax2jstree(ast[1], vars)),
+                jstree('delay', jstree('first', syntax2jstree(ast[2], vars)))
             )
         )
     elseif ast.type == 'and' then
@@ -660,8 +600,8 @@ local function syntaxstr(ast, vars)
             jstree(
                 'call',
                 jstree('name', 'and'),
-                jstree('first', syntaxstr(ast[1], vars)),
-                jstree('delay', jstree('first', syntaxstr(ast[2], vars)))
+                jstree('first', syntax2jstree(ast[1], vars)),
+                jstree('delay', jstree('first', syntax2jstree(ast[2], vars)))
             )
         )
     elseif ast.type == 'table' then
@@ -673,17 +613,17 @@ local function syntaxstr(ast, vars)
         for i=1, #ast do
             local field = ast[i]
             if field.type == 'fieldnamed' then
-                body[#body + 1] = jstree('set', t, jstree('string', field[1][1]), jstree('first', syntaxstr(field[2], vars)))
+                body[#body + 1] = jstree('set', t, jstree('string', field[1][1]), jstree('first', syntax2jstree(field[2], vars)))
             elseif field.type == 'fieldnth' then
                 if i ~= #ast then
-                    body[#body + 1] = jstree('set', t, n, jstree('first', syntaxstr(field[1], vars)))
+                    body[#body + 1] = jstree('set', t, n, jstree('first', syntax2jstree(field[1], vars)))
                     body[#body + 1] = jstree('assign', n, jstree('add', n, jstree('number', 1)))
                 else
                     local v = jstree('name', 'v')
                     body[#body + 1] = jstree(
                         'forof',
                         v,
-                        syntaxstr(field[1], vars),
+                        syntax2jstree(field[1], vars),
                         jstree(
                             'block',
                             jstree('set', t, n, v),
@@ -692,7 +632,7 @@ local function syntaxstr(ast, vars)
                     )
                 end
             elseif field.type == 'fieldvalue' then
-                body[#body + 1] = jstree('set', t, jstree('first', syntaxstr(field[1], vars)), jstree('first', syntaxstr(field[2], vars)))
+                body[#body + 1] = jstree('set', t, jstree('first', syntax2jstree(field[1], vars)), jstree('first', syntax2jstree(field[2], vars)))
             end
         end
         body[#body + 1] = jstree('return', t)
@@ -706,8 +646,8 @@ local function syntaxstr(ast, vars)
     elseif ast.type == 'while' then
         return jstree(
             'while',
-            jstree('toboolean', jstree('first', syntaxstr(ast[1], vars))),
-            syntaxstr(ast[2], vars)
+            jstree('toboolean', jstree('first', syntax2jstree(ast[1], vars))),
+            syntax2jstree(ast[2], vars)
         )
     elseif ast.type == 'forin' then
         local f = makeast('ident', nil, mangle('func'))
@@ -720,20 +660,20 @@ local function syntaxstr(ast, vars)
         local exprassignvar1 = makeast('assign', nil, makeast('to', nil, f),makeast('from', nil, ast[1][1]))
         local exprloopbody = makeast('begin', nil, exprvars, exprcheckvar1, exprassignvar1, ast[3])
         local exprloop = makeast('while', nil, makeast('literal', nil, 'true'), exprloopbody)
-        return syntaxstr(exprfsv, vars) .. ';' .. syntaxstr(exprloop, vars)
+        return syntax2jstree(exprfsv, vars) .. ';' .. syntax2jstree(exprloop, vars)
     elseif ast.type == 'for' then
         local cvar = vars[#vars]
         cvar[#cvar + 1] = ast[1][1]
         cvar[ast[1][1]] = false
         local inrange = {}
         for i = 2, #ast - 1 do
-            inrange[#inrange + 1] = jstree('first', syntaxstr(ast[i], vars))
+            inrange[#inrange + 1] = jstree('first', syntax2jstree(ast[i], vars))
         end
         if inrange[3] == nil then
             inrange[3] = jstree('number', '1')
         end
         local start = jstree('load', ast[1][1])
-        local body = syntaxstr(ast[#ast], vars)
+        local body = syntax2jstree(ast[#ast], vars)
         return jstree('for', start, inrange[1], inrange[2], inrange[3], body)
     elseif ast.type == 'ident' then
         for i = 1, #vars do
@@ -752,31 +692,31 @@ local function syntaxstr(ast, vars)
     elseif ast.type == 'program' then
         local tab = {}
         for i = 1, #ast do
-            tab[#tab + 1] = syntaxstr(ast[i], vars)
+            tab[#tab + 1] = syntax2jstree(ast[i], vars)
         end
         return jstable('program', tab)
     elseif ast.type == 'begin' then
         vars[#vars + 1] = {}
         local tab = {}
         for i=1, #ast do
-            tab[#tab + 1] = syntaxstr(ast[i], vars)
+            tab[#tab + 1] = syntax2jstree(ast[i], vars)
         end
         vars[#vars] = nil
         return jstable('block', tab)
     elseif ast.type == 'postfix' then
-        return syntaxstr(unpostfix(ast), vars)
+        return syntax2jstree(unpostfix(ast), vars)
     elseif ast.type == 'method' then
         local args = {
             jstree('name', 'apply'),
-            jstree('first', syntaxstr(ast[1], vars)),
+            jstree('first', syntax2jstree(ast[1], vars)),
             jstree('string', ast[2][1])
         }
         local call = ast[#ast]
         for i = 1, #call do
             if i ~= #call then
-                args[#args + 1] = jstree('first', syntaxstr(call[i], vars))
+                args[#args + 1] = jstree('first', syntax2jstree(call[i], vars))
             else
-                args[#args + 1] = jstree('expand', syntaxstr(call[i], vars))
+                args[#args + 1] = jstree('expand', syntax2jstree(call[i], vars))
             end
         end
         return jstable('call', args)
@@ -786,9 +726,9 @@ local function syntaxstr(ast, vars)
         }
         for i = 1, #ast do
             if i == #ast and i ~= 1 then
-                args[#args + 1] = jstree('expand', syntaxstr(ast[i], vars))
+                args[#args + 1] = jstree('expand', syntax2jstree(ast[i], vars))
             else
-                args[#args + 1] = jstree('first', syntaxstr(ast[i], vars))
+                args[#args + 1] = jstree('first', syntax2jstree(ast[i], vars))
             end
         end
         return jstable('call', args)
@@ -799,7 +739,7 @@ local function syntaxstr(ast, vars)
                 'get',
                 jstree(
                     'first',
-                    syntaxstr(ast[1], vars)
+                    syntax2jstree(ast[1], vars)
                 ),
                 jstree(
                     'string',
@@ -814,11 +754,11 @@ local function syntaxstr(ast, vars)
                 'get',
                 jstree(
                     'first',
-                    syntaxstr(ast[1], vars)
+                    syntax2jstree(ast[1], vars)
                 ),
                 jstree(
                     'first',
-                    syntaxstr(ast[2], vars)
+                    syntax2jstree(ast[2], vars)
                 )
             )
         )
@@ -828,9 +768,9 @@ local function syntaxstr(ast, vars)
         local parts = {}
         for i = 1, #exprs do
             if i ~= #exprs then
-                parts[#parts + 1] = jstree('first', syntaxstr(exprs[i], vars))
+                parts[#parts + 1] = jstree('first', syntax2jstree(exprs[i], vars))
             else
-                parts[#parts + 1] = jstree('expand', syntaxstr(exprs[i], vars))
+                parts[#parts + 1] = jstree('expand', syntax2jstree(exprs[i], vars))
             end
         end
         local setparts = jstree('let', jstree('name', 'parts'), jstable('array', parts))
@@ -858,15 +798,15 @@ local function syntaxstr(ast, vars)
             elseif target.type == 'dotindex' then
                 stmts[#stmts + 1] = jstree(
                     'set', 
-                    jstree('first', syntaxstr(target[1], vars)), 
+                    jstree('first', syntax2jstree(target[1], vars)), 
                     jstree('string', target[2][1]),
                     jstree('shift', jstree('name', 'parts'))
                 )
             elseif target.type == 'index' then
                 stmts[#stmts + 1] = jstree(
                     'set', 
-                    jstree('first', syntaxstr(target[1], vars)), 
-                    jstree('first', syntaxstr(target[2], vars)), 
+                    jstree('first', syntax2jstree(target[1], vars)), 
+                    jstree('first', syntax2jstree(target[2], vars)), 
                     jstree('shift', jstree('name', 'parts'))
                 )
             else
@@ -888,7 +828,7 @@ local function syntaxstr(ast, vars)
         end
         local tmp = makeast('assign', ast[2].pos, makeast('to', ast[1].pos, unpostfix(target)[1]),
             makeast('from', ast[2].pos, makeast('lambda', ast[2].pos, args, ast[2])))
-        return syntaxstr(tmp, vars)
+        return syntax2jstree(tmp, vars)
     elseif ast.type == 'local' then
         local idents = ast[1]
         local exprs = ast[2]
@@ -896,15 +836,15 @@ local function syntaxstr(ast, vars)
         if idents.type == 'ident' then
             cvar[#cvar + 1] = idents[1]
             cvar[idents[1]] = true
-            return jstree('let', jstree('load', idents[1]), jstree('first', syntaxstr(exprs, vars)))
+            return jstree('let', jstree('load', idents[1]), jstree('first', syntax2jstree(exprs, vars)))
         else
             local tab = {}
             if exprs ~= nil then
                 for i = 1, #exprs do
                     if i == #exprs then
-                        tab[#tab + 1] = jstree('expand', syntaxstr(exprs[i], vars))
+                        tab[#tab + 1] = jstree('expand', syntax2jstree(exprs[i], vars))
                     else
-                        tab[#tab + 1] = jstree('first', syntaxstr(exprs[i], vars))
+                        tab[#tab + 1] = jstree('first', syntax2jstree(exprs[i], vars))
                     end
                 end
             end
@@ -930,7 +870,7 @@ local function syntaxstr(ast, vars)
                 args[#args + 1] = jstree('arg', jstree('load', arg[1]))
             end
         end
-        local body = syntaxstr(ast[2], vars)
+        local body = syntax2jstree(ast[2], vars)
         args[#args + 1] = body
         vars[#vars] = nil
         return jstree('array', jstree('lambda', jstable('block', args)))
@@ -938,9 +878,9 @@ local function syntaxstr(ast, vars)
         local seg = {}
         for i = 1, #ast[1] do
             if i ~= #ast[1] then
-                seg[i] = jstree('first', syntaxstr(ast[1][i], vars))
+                seg[i] = jstree('first', syntax2jstree(ast[1][i], vars))
             else
-                seg[i] = jstree('expand', syntaxstr(ast[1][i], vars))
+                seg[i] = jstree('expand', syntax2jstree(ast[1][i], vars))
             end
         end
         return jstree(
@@ -955,22 +895,22 @@ local function syntaxstr(ast, vars)
                 if ret == nil then
                     ret = jstree(
                         'if',
-                        syntaxstr(part[1], vars),
-                        syntaxstr(part[2], vars)
+                        syntax2jstree(part[1], vars),
+                        syntax2jstree(part[2], vars)
                     )
                 else
                     ret = jstree(
                         'ifelse',
                         jstree(
                             'toboolean',
-                            jstree('first', syntaxstr(part[1], vars))
+                            jstree('first', syntax2jstree(part[1], vars))
                         ),
-                        syntaxstr(part[2], vars),
+                        syntax2jstree(part[2], vars),
                         ret
                     )
                 end
             elseif part.type == 'else' then
-                ret = syntaxstr(part[1], vars)
+                ret = syntax2jstree(part[1], vars)
             else
                 error('ast.type = ' .. part.type)
             end
@@ -982,7 +922,7 @@ local function syntaxstr(ast, vars)
             jstree(
                 'call',
                 jstree('name', 'unm'),
-                jstree('first', syntaxstr(ast[1], vars))
+                jstree('first', syntax2jstree(ast[1], vars))
             )
         )
     elseif ast.type == 'length' then
@@ -991,7 +931,7 @@ local function syntaxstr(ast, vars)
             jstree(
                 'call',
                 jstree('name', 'length'),
-                jstree('first', syntaxstr(ast[1], vars))
+                jstree('first', syntax2jstree(ast[1], vars))
             )
         )
     elseif ast.type == 'varargs' then
@@ -1002,12 +942,109 @@ local function syntaxstr(ast, vars)
             jstree(
                 'call',
                 ops[ast.type],
-                jstree('first', syntaxstr(ast[1], vars)),
-                jstree('first', syntaxstr(ast[2], vars))
+                jstree('first', syntax2jstree(ast[1], vars)),
+                jstree('first', syntax2jstree(ast[2], vars))
             )
         )
     else
         error('ast = ' .. aststr(ast))
+    end
+end
+
+local function emitjs(obj)
+    if type(obj) ~= 'table' then
+        return tostring(obj)
+    end
+    if obj.type == 'first' then
+        if obj[1].type == 'array' then
+            if #obj[1] == 1 then
+                return emitjs(obj[1][1])
+            end
+        end
+    elseif obj.type == 'expand' then
+        local expandvalue = obj[1]
+        if expandvalue.type == 'array' then
+            local res = {}
+            for i=1, #expandvalue do
+                res[i] = emitjs(expandvalue[i])
+            end
+            return table.concat(res, ',')
+        end
+    end
+    local type = obj.type
+    local ents = {}
+    for i=1, #obj do
+        ents[i] = emitjs(obj[i])
+    end
+    if type == 'array' then
+        return '[' .. table.concat(ents) .. ']'
+    elseif type == 'stmts' then
+        return table.concat(ents, ';') .. ';'
+    elseif type == 'program' then
+        return '((local__ENV=env())=>{;' .. table.concat(ents, ';') .. ';})()'
+    elseif type == 'block' then
+        return '{' .. table.concat(ents, ';') .. ';}'
+    elseif type == 'if' then
+        return 'if(' .. ents[1] .. '){' .. ents[2] .. '}'
+    elseif type == 'ifelse' then
+        return 'if(' .. ents[1] .. '){' .. ents[2] .. '}else{' .. ents[3] .. '}'
+    elseif type == 'name' then
+        return ents[1]
+    elseif type == 'load' then
+        return mangle(ents[1])
+    elseif type == 'call' then
+        local res = {}
+        for i=2, #ents do
+            res[i-1] = ents[i]
+        end
+        return '(' .. ents[1] .. '(' .. table.concat(res, ',') .. '))'
+    elseif type == 'return' then
+        return 'return ' .. ents[1]
+    elseif type == 'toboolean' then
+        return 'toboolean(' .. ents[1] .. ')'
+    elseif type == 'assign' then
+        return ents[1] .. '=' .. ents[2]
+    elseif type == 'get' then
+        return 'index(' .. ents[1] .. ',' .. ents[2] .. ')'
+    elseif type == 'set' then
+        return 'set(' .. ents[1] .. ',' .. ents[2] .. ',' .. ents[3] .. ')'
+    elseif type == 'string' then
+        return '"' .. ents[1] .. '"'
+    elseif type == 'expand' then
+        return '...(' .. ents[1] .. ')'
+    elseif type == 'iife' then
+        return '(() => {' .. ents[1] .. '})()'
+    elseif type == 'lambda' then
+        return 'function(...varargs){arg(varargs, this);' .. ents[1] .. ';}'
+    elseif type == 'shift' then
+        return '(' .. ents[1] .. ').shift()'
+    elseif type == 'arg' then
+        return 'var ' .. ents[1] .. '=varargs.shift()'
+    elseif type == 'first' then
+        return 'first(' .. ents[1] .. ')'
+    elseif type == 'object' then
+        return 'Object.create(null)'
+    elseif type == 'break' then
+        return 'break'
+    elseif type == 'number' then
+        return ents[1]
+    elseif type == 'while' then
+        return 'while(' .. ents[1] .. '){' .. ents[2] .. '}'
+    elseif type == 'delay' then
+        return '(()=>' .. ents[1] .. ')'
+    elseif type == 'forof' then
+        return 'for (const ' .. ents[1] .. ' of ' .. ents[2] .. '){' .. ents[3] .. '}'
+    elseif type == 'for' then
+        return 'for (let i=' .. ents[2] .. ',m=' .. ents[3] .. ',c=' .. ents[4] .. ';i<=m;i+=c){var ' .. ents[1] ..
+        '=i;' .. ents[5] .. '}'
+    elseif type == 'add' then
+        return '('.. ents[1] .. '+' .. ents[2] .. ')'
+    elseif type == 'not' then
+        return '(!' .. ents[1] .. ')'
+    elseif type == 'let' then
+        return 'var ' .. ents[1] .. '=' .. ents[2]
+    else
+        error('jstree(' .. type .. ')')
     end
 end
 
@@ -1040,7 +1077,8 @@ local slurp = io.slurp
 local src = slurp(infile)
 local res = parse(lua.program, src)
 if res.ok == true then
-    local str = syntaxstr(res.ast, {{"_ENV"}})
+    local tree = syntax2jstree(res.ast, {{"_ENV"}})
+    local str = emitjs(tree)
     local names = '{first,index,set,unm,add,sub,mul,div,mod,pow,eq,ne,lt,le,gt,ge,concat,toboolean,and,or,apply,call,length,env,arg}'
     str = '(function(){globalThis.global__lua =' .. names .. ';' .. str .. '}).call(null)'
     if outfile ~= nil then

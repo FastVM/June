@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "fs/promises";
+import { readFileSync, writeFileSync } from "fs";
 
 // const readFile = () => '';
 // const writeFile = () => {};
@@ -68,19 +68,19 @@ export const toboolean = (a) => {
   return a != null && a !== false;
 }
 
-export const and = async (a, b) => (toboolean(a) ? await b() : a);
-export const or = async (a, b) => (toboolean(a) ? a : await b());
+export const and = (a, b) => (toboolean(a) ? b() : a);
+export const or = (a, b) => (toboolean(a) ? a : b());
 
 const array_of = (v) => (Array.isArray(v) ? v : [v]);
 
-export const apply = async (obj, func, ...args) => {
-  return array_of(await index(obj, func).apply(obj, args));
+export const apply = (obj, func, ...args) => {
+  return array_of(index(obj, func).apply(obj, args));
 };
-export const call = async (func, ...args) => {
-  if (typeof func === "object") {
-    return call();
-  }
-  return array_of(await func.apply(null, args));
+export const call = (func, ...args) => {
+  // if (typeof func === "object") {
+  //   return call();
+  // }
+  return array_of(func.apply(null, args));
 };
 
 export const length = meta("__len", (a) => {
@@ -161,26 +161,26 @@ export const env = (dataArg) => {
     write(s);
     return [null];
   };
-  env.io.read = async (s) => {
-    switch (s) {
-      case "*all":
-        return (await readline).read();
-      case "*line":
-        return (await readline).prompt();
-      case "*number":
-        return (await readline).questionFloat();
-      default:
-        return (await readline).read(Number(s));
-    }
-  };
-  env.io.open = async (path, mode = "r") => {
+  // env.io.read = (s) => {
+  //   switch (s) {
+  //     case "*all":
+  //       return readline.read();
+  //     case "*line":
+  //       return readline.prompt();
+  //     case "*number":
+  //       return readline.questionFloat();
+  //     default:
+  //       return readline.read(Number(s));
+  //   }
+  // };
+  env.io.open = (path, mode = "r") => {
     if (typeof path !== "string") {
       throw new Error("cannot open non-string path");
     }
     if (mode.indexOf("r") !== -1) {
       const file = Object.create(null);
       file[internal] = Object.create(null);
-      file[internal].str = await readFile(path);
+      file[internal].str = readFileSync(path);
       file[internal].head = 0;
       file.close = () => {};
       file.read = (file, txt) => {
