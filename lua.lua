@@ -359,7 +359,6 @@ for i = 1, #keywords do
     hashkeywords[keywords[i]] = keywords[i]
 end
 local function isident(id)
-    print(id, hashkeywords[id], hashkeywords[id] == nil)
     return hashkeywords[id] == nil
 end
 local function iskeyword(id)
@@ -426,7 +425,7 @@ lua.varargs = lua.ast('varargs', lua.ignore(parser_string('...')))
 lua.literal = lua.ast('literal', parser_first(lua.varargs, lua.keywordliteral('nil'), lua.keywordliteral('false'),
     lua.keywordliteral('true')))
 lua.number = lua.ast('number', lua.digits)
-lua.ident = lua.ast('0ident', parser_cond(lua.name, isident))
+lua.ident = lua.ast('ident', parser_cond(lua.name, isident))
 lua.params = lua.ast('params', lua.ignore(parser_exact('(')),
     parser_transform(parser_sep(parser_first(lua.varargs, lua.ident), parser_exact(',')), astlist),
     lua.ignore(parser_exact(')')))
@@ -652,7 +651,7 @@ local function syntaxstr(ast, vars)
                 'call',
                 jstree('name', 'or'),
                 jstree('first', syntaxstr(ast[1], vars)),
-                jstree('first', jstree('delay', syntaxstr(ast[2], vars)))
+                jstree('delay', jstree('first', syntaxstr(ast[2], vars)))
             )
         )
     elseif ast.type == 'and' then
@@ -662,7 +661,7 @@ local function syntaxstr(ast, vars)
                 'call',
                 jstree('name', 'and'),
                 jstree('first', syntaxstr(ast[1], vars)),
-                jstree('first', jstree('delay', syntaxstr(ast[2], vars)))
+                jstree('delay', jstree('first', syntaxstr(ast[2], vars)))
             )
         )
     elseif ast.type == 'table' then
@@ -922,12 +921,6 @@ local function syntaxstr(ast, vars)
     elseif ast.type == 'lambda' then
         local cvar = {}
         vars[#vars + 1] = cvar
-        for i = 1, #ast[1] do
-            local arg = ast[1][i]
-            if arg.type ~= 'varargs' then
-                local name = arg[1]
-            end
-        end
         local args = {}
         for i=1, #ast[1] do
             local arg = ast[1][i]
