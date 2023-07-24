@@ -1,2 +1,1 @@
-local n = arg and arg[1] or ''
-print("Hello world " .. n .. "!")
+print("Hello world!")

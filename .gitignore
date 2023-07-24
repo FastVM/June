@@ -1,6 +1,5 @@
 .babelrc
 .config.make
-lua.js
 bench/*.res
 bench/all.log
 package-lock.json
@@ -9,3 +8,5 @@ node_modules
 *.opt.js
 dist/*
 out.*
+*.js
+!prelude.js

@@ -1,0 +1,8 @@
+{
+  "name": "june-std",
+  "type": "module",
+  "version": "0.0.1",
+  "description": "lua's _ENV in Javascript",
+  "author": "FastVM",
+  "license": "MIT"
+}

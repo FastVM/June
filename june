@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+
+FILE="$1"
+
+shift
+
+luajit lua.lua "$FILE" "$FILE.js"
+
+node "$FILE.js" "$@"

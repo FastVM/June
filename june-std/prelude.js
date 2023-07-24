@@ -77,9 +77,9 @@ export const apply = (obj, func, ...args) => {
   return array_of(index(obj, func).apply(obj, args));
 };
 export const call = (func, ...args) => {
-  // if (typeof func === "object") {
-  //   return call();
-  // }
+  if (func != null && typeof func === "object" && func[metatable] != null) {
+    return array_of(call(func[metatable]['__call'], func, ...args));
+  }
   return array_of(func.apply(null, args));
 };
 
@@ -105,16 +105,9 @@ const table_to_array = (table) => {
   return arr;
 }
 
-export const env = (dataArg) => {
-  const data = dataArg ?? {};
-  const argv = data.argv ?? process.argv;
-  // const argv = ['node', 'lua.js', 'lua.lua', 'rec.js'];
-  const write =
-    data.write ??
-    ((s) => {
-      process.stdout.write(s);
-    });
+export const env = () => {
   const env = Object.create(null);
+  env._G = env;
 
   env.js = Object.create(null);
   env.js.global = globalThis;
@@ -123,10 +116,11 @@ export const env = (dataArg) => {
   };
   env.js.import = (x) => import(x);
 
-  env._G = env;
+  env._VERSION = 'Lua 5.4'
+
   env.arg = Object.create(null);
-  for (let i = 0; i < argv.length; i++) {
-    env.arg[i - 1] = argv[i];
+  for (let i = 0; i < process.argv.length; i++) {
+    env.arg[i - 1] = process.argv[i];
   }
 
   const typemap = {
@@ -157,8 +151,24 @@ export const env = (dataArg) => {
   env.table.unpack = (args) => table_to_array(args);
 
   env.io = Object.create(null);
-  env.io.write = (s) => {
-    write(s);
+  env.io.write = (...s) => {
+    for (const i of s) {
+      process.stdout.write(String(i));
+    }
+    return [null];
+  };
+  env.io.stderr = Object.create(null);
+  env.io.stdout = Object.create(null);
+  env.io.stdout.write = (...s) => {
+    for (const i of s) {
+      process.stdout.write(String(i));
+    }
+    return [null];
+  };
+  env.io.stderr.write = (...s) => {
+    for (const i of s) {
+      process.stderr.write(String(i));
+    }
     return [null];
   };
   // env.io.read = (s) => {
@@ -231,7 +241,7 @@ export const env = (dataArg) => {
       file[internal].parts = [];
       file.close = (file) => {
         const data = file[internal];
-        writeFile(data.path, data.parts.join(""));
+        writeFileSync(data.path, data.parts.join(""));
         return [null];
       };
       file.write = (file, txt) => {

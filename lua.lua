@@ -276,7 +276,30 @@ end
 
 local lua = {}
 
-lua.comment = parser_listof(parser_string('--'), parser_list0(parser_notexact('\n')))
+lua.commentstring = parser_first(
+    parser_listof(
+        parser_string('[['),
+        parser_list0(
+            parser_first(
+                parser_listof(parser_exact(']'), parser_notexact(']')),
+                parser_notexact(']')
+            )
+        ),
+        parser_string(']]')
+    ),
+    parser_listof(
+        parser_string('[=['),
+        parser_list0(
+            parser_first(
+                parser_listof(parser_exact(']'), parser_exact('='), parser_notexact(']')),
+                parser_listof(parser_exact(']'), parser_notexact('=')),
+                parser_notexact(']')
+            )
+        ),
+        parser_string(']=]')
+    )
+)
+lua.comment = parser_listof(parser_string('--'), parser_first(lua.commentstring, parser_list0(parser_notexact('\n'))))
 lua.ws = parser_list0(parser_first(parser_exact(' '), parser_exact('\n'), parser_exact('\t'), parser_exact('\r'),
     lua.comment))
 
@@ -397,17 +420,18 @@ end
 lua.lowerletter = parser_range('a', 'z')
 lua.upperletter = parser_range('A', 'Z')
 lua.digit = parser_range('0', '9')
+lua.hexdigit = parser_first(parser_range('0', '9'), parser_range('A', 'F'), parser_range('a', 'f'))
 lua.letter = parser_first(lua.lowerletter, lua.upperletter)
-lua.digits = parser_cond(parser_transform(parser_list1(parser_first(lua.digit, parser_exact('.'))), fun_joinlist),
-    function(s)
-        local dots = 0
-        for i = 1, string.len(s) do
-            if string.sub(s, i, i) == '.' then
-                dots = dots + 1
-            end
+lua.hexdigits = parser_transform(parser_list1(lua.hexdigit), fun_joinlist)
+lua.digits = parser_cond(parser_transform(parser_list1(parser_first(lua.digit, parser_exact('.'))), fun_joinlist), function(s)
+    local dots = 0
+    for i = 1, string.len(s) do
+        if string.sub(s, i, i) == '.' then
+            dots = dots + 1
         end
-        return dots <= 1
-    end)
+    end
+    return dots <= 1
+end)
 lua.name = parser_transform(parser_cons(parser_first(lua.letter, parser_exact('_')),
     parser_list0(parser_first(lua.digit, lua.letter, parser_exact('_')))), fun_joinlist)
 
@@ -424,7 +448,7 @@ lua.chunk = lua.delay('chunk')
 lua.varargs = lua.ast('varargs', lua.ignore(parser_string('...')))
 lua.literal = lua.ast('literal', parser_first(lua.varargs, lua.keywordliteral('nil'), lua.keywordliteral('false'),
     lua.keywordliteral('true')))
-lua.number = lua.ast('number', lua.digits)
+lua.number = parser_first(lua.ast('number', lua.digits), lua.ast('number', lua.ignore(parser_listof(parser_exact('0'), parser_exact('x'))), lua.hexdigits))
 lua.ident = lua.ast('ident', parser_cond(lua.name, isident))
 lua.params = lua.ast('params', lua.ignore(parser_exact('(')),
     parser_transform(parser_sep(parser_first(lua.varargs, lua.ident), parser_exact(',')), astlist),
@@ -445,16 +469,40 @@ lua.args = parser_first(lua.ast('call', lua.string), lua.ast('call', lua.table),
 lua.index = lua.ast('index', lua.ignore(parser_exact('[')), lua.expr, lua.ignore(parser_exact(']')))
 lua.dotindex = lua.ast('dotindex', lua.ignore(parser_exact('.')), lua.ident)
 lua.methodcall = lua.ast('method', lua.ignore(parser_exact(':')), lua.ident, lua.args)
-lua.postext = parser_first(lua.args, lua.index, lua.dotindex, lua.methodcall)
+lua.pow = lua.ast('pow', lua.ignore(parser_exact('^')), lua.post)
+lua.postext = parser_first(lua.args, lua.pow, lua.index, lua.dotindex, lua.methodcall)
 lua.post = lua.ast('postfix', lua.single, parser_transform(parser_list0(lua.postext), astlist))
-lua.pre = parser_first(lua.ast('length', lua.ignore(parser_exact('#')), lua.post),
-    lua.ast('negate', lua.ignore(parser_exact('-')), lua.post), lua.ast('not', lua.keyword('not'), lua.post), lua.post)
+lua.pre = parser_first(
+    lua.ast('length', lua.ignore(parser_exact('#')), lua.post),
+    lua.ast('negate', lua.ignore(parser_exact('-')), lua.post),
+    lua.ast('bnot', lua.ignore(parser_exact('~')), lua.post),
+    lua.ast('not', lua.keyword('not'), lua.post),
+    lua.post
+)
 
-lua.powexpr = lua.binop(lua.pre, {'^'})
-lua.mulexpr = lua.binop(lua.powexpr, {'*', '/', '%'})
+--[[
+    or
+    and
+    <     >     <=    >=    ~=    ==
+    |
+    ~
+    &
+    <<    >>
+    ..
+    +     -
+    *     /     //    %
+    unary operators (not   #     -     ~)
+    ^
+]]
+
+lua.mulexpr = lua.binop(lua.pre, {'*', '/', '%'})
 lua.addexpr = lua.binop(lua.mulexpr, {'+', '-'})
 lua.catexpr = lua.binop(lua.addexpr, {'..'})
-lua.compare = lua.binop(lua.catexpr, {'<=', '>=', '==', '~=', '<', '>'})
+lua.shiftexpr = lua.binop(lua.catexpr, {'>>', '<<'})
+lua.bandexpr = lua.binop(lua.shiftexpr, {'&'})
+lua.bxorexpr = lua.binop(lua.bandexpr, {'~'})
+lua.borexpr = lua.binop(lua.bxorexpr, {'|'})
+lua.compare = lua.binop(lua.borexpr, {'<=', '>=', '==', '~=', '<', '>'})
 lua.logic = lua.binop(lua.compare, {'and', 'or'})
 lua.expr = lua.logic
 
@@ -534,6 +582,11 @@ ops['<='] = 'le'
 ops['>='] = 'ge'
 ops['=='] = 'eq'
 ops['~='] = 'ne'
+ops['<<'] = 'shl'
+ops['>>'] = 'shr'
+ops['~'] = 'bxor'
+ops['&'] = 'band'
+ops['|'] = 'bor'
 
 local function unpostfix(ast)
     if ast.type ~= 'postfix' then
@@ -660,7 +713,7 @@ local function syntax2jstree(ast, vars)
         local exprassignvar1 = makeast('assign', nil, makeast('to', nil, f),makeast('from', nil, ast[1][1]))
         local exprloopbody = makeast('begin', nil, exprvars, exprcheckvar1, exprassignvar1, ast[3])
         local exprloop = makeast('while', nil, makeast('literal', nil, 'true'), exprloopbody)
-        return syntax2jstree(exprfsv, vars) .. ';' .. syntax2jstree(exprloop, vars)
+        return jstree('stmts', syntax2jstree(exprfsv, vars), syntax2jstree(exprloop, vars))
     elseif ast.type == 'for' then
         local cvar = vars[#vars]
         cvar[#cvar + 1] = ast[1][1]
@@ -977,7 +1030,7 @@ local function emitjs(obj)
         ents[i] = emitjs(obj[i])
     end
     if type == 'array' then
-        return '[' .. table.concat(ents) .. ']'
+        return '[' .. table.concat(ents, ',') .. ']'
     elseif type == 'stmts' then
         return table.concat(ents, ';') .. ';'
     elseif type == 'program' then
@@ -1079,10 +1132,10 @@ local res = parse(lua.program, src)
 if res.ok == true then
     local tree = syntax2jstree(res.ast, {{"_ENV"}})
     local str = emitjs(tree)
-    local names = '{first,index,set,unm,add,sub,mul,div,mod,pow,eq,ne,lt,le,gt,ge,concat,toboolean,and,or,apply,call,length,env,arg}'
+    local names = '{first,index,set,unm,add,sub,mul,div,mod,pow,eq,ne,lt,le,gt,ge,concat,toboolean,and,or,apply,call,length,env,arg,shl,shr,bxor,band,bor}'
     str = '(function(){globalThis.global__lua =' .. names .. ';' .. str .. '}).call(null)'
     if outfile ~= nil then
-        local pre = 'import'.. names .. 'from "./prelude.js";'
+        local pre = 'import'.. names .. 'from "june-std/prelude.js";'
         str = pre .. str
         io.dump(outfile, str)
     elseif js then

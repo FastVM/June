@@ -20,7 +20,11 @@ local function ItemCheck(tree)
     end
 end
 
-local N = 12
+local N = 14
+if arg[1] ~= nil then
+    N = tonumber(arg[1])    
+end
+
 local mindepth = 4
 local maxdepth = mindepth + 2
 if maxdepth < N then
